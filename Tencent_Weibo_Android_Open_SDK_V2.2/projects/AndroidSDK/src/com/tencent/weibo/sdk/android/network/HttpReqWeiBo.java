@@ -7,9 +7,23 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.httpclient.HttpMethod;
-import org.apache.commons.httpclient.methods.ByteArrayRequestEntity;
-import org.apache.commons.httpclient.methods.PostMethod;
+
+
+
+
+
+
+
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.params.BasicHttpParams;
+import org.apache.http.params.HttpParams;
+import org.apache.http.params.HttpProtocolParams;
+//import org.apache.commons.httpclient.HttpRequestBase;
+//import org.apache.commons.httpclient.methods.ByteArrayRequestEntity;
+//import org.apache.commons.httpclient.methods.HttpPost;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -150,16 +164,24 @@ public class HttpReqWeiBo extends HttpReq {
 	}
 
 	@Override
-	protected void setReq(HttpMethod method) throws Exception {
+	protected void setReq(HttpRequestBase method) throws Exception {
 		// TODO Auto-generated method stub
 
 		if ("POST".equals(mMethod)) {
-			PostMethod post = (PostMethod) method;
-			String mParamstr = mParam.toString();
-			post.addParameter("Connection", "Keep-Alive");
-			post.addParameter("Charset", "UTF-8");
-			post.setRequestEntity(new ByteArrayRequestEntity(mParam.toString()
-					.getBytes("utf-8")));
+			HttpPost post = (HttpPost) method;
+//			String mParamstr = mParam.toString();
+//			post.addParameter("Connection", "Keep-Alive");
+//			post.addParameter("Charset", "UTF-8");
+//			post.setRequestEntity(new ByteArrayRequestEntity(mParam.toString().getBytes("utf-8")));
+			
+			
+			HttpParams params = new BasicHttpParams();
+			params.setParameter("Connection", "Keep-Alive");
+			params.setParameter("Charset", "UTF-8");
+			HttpProtocolParams.setContentCharset(params, "UTF_8");
+			
+			HttpEntity entity = new ByteArrayEntity(mParam.toString().getBytes("utf-8"));
+			post.setEntity(entity);
 		}
 
 	}
@@ -173,10 +195,12 @@ public class HttpReqWeiBo extends HttpReq {
 		// TODO Auto-generated method stub
 
 		if ("POST".equals(mMethod)) {
-			PostMethod post = new UTF8PostMethod(mUrl);
-			String mParamstr = mParam.toString();
-			post.setRequestEntity(new ByteArrayRequestEntity(mParam.toString()
-					.getBytes("utf-8")));
+			HttpPost post = new UTF8HttpPost(mUrl);
+//			String mParamstr = mParam.toString();
+//			post.setRequestEntity(new ByteArrayRequestEntity(mParam.toString().getBytes("utf-8")));
+			
+			HttpEntity entity = new ByteArrayEntity(mParam.toString().getBytes("utf-8"));
+			post.setEntity(entity);
 		}
 
 	}

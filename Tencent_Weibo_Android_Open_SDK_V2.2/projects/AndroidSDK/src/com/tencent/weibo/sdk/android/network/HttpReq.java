@@ -1,26 +1,31 @@
 package com.tencent.weibo.sdk.android.network;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
-import java.util.ArrayList;
+import java.nio.charset.Charset;
 import java.util.zip.GZIPInputStream;
 
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpMethod;
-import org.apache.commons.httpclient.HttpStatus;
-import org.apache.commons.httpclient.methods.GetMethod;
-import org.apache.commons.httpclient.methods.PostMethod;
-import org.apache.commons.httpclient.methods.multipart.ByteArrayPartSource;
-import org.apache.commons.httpclient.methods.multipart.FilePart;
-import org.apache.commons.httpclient.methods.multipart.MultipartRequestEntity;
-import org.apache.commons.httpclient.methods.multipart.Part;
-import org.apache.commons.httpclient.methods.multipart.StringPart;
+
+
+
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.entity.mime.content.ByteArrayBody;
+import org.apache.http.entity.mime.content.FileBody;
+import org.apache.http.entity.mime.content.StringBody;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.util.EntityUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
 
 import android.os.AsyncTask;
+import android.util.Log;
 
 /**
  * 处理网络请求的抽象类，异步发出网络请求，返回网络数据后并响应回调函数
@@ -55,7 +60,7 @@ public abstract class HttpReq extends AsyncTask<Void, Integer, Object> {
 	 * @param method 网络请求方式 post或者get
 	 * @throws Exception
 	 */
-	protected abstract void setReq(HttpMethod method) throws Exception;
+	protected abstract void setReq(HttpRequestBase method) throws Exception;
 
 	/**
 	 * 响应网络请求得抽象函数
@@ -100,41 +105,65 @@ public abstract class HttpReq extends AsyncTask<Void, Integer, Object> {
 	 */
 	public Object runReq() throws Exception {
 
-		HttpClient client = new HttpClient();
-		HttpMethod method = null;
+		HttpRequestBase method = null;
 		int statusCode = -1;
+		
+		Log.e("QQ weibo", mUrl);
 
 		// 区分POST,GET方法
 		if (mMethod.equals(GET)) {
 			mUrl += "?"
 					+ mParam.toString().substring(0,
 							mParam.toString().length() - 1);
-			method = new GetMethod(mUrl);
+			method = new HttpGet(mUrl);
 		} else if (mMethod.equals(POST)) {
 			if (mParam.getmParams().get("pic") != null) {
 				return processResponse(picMethod());
 			}
 
-			method = new UTF8PostMethod(mUrl);
+			method = new HttpPost(mUrl);
 		} else {
 			throw new Exception("unrecognized http method");
 		}
-		client.getHostConfiguration().setHost(mHost, mPort, "https");
+		
+		Object result = null;
+		
+		//===========================================================================
+	    //HttpHost proxy = new HttpHost(mHost, mPort, "https");
 
-		method.setRequestHeader("Content-Type",
-				"application/x-www-form-urlencoded");
+	    //DefaultHttpClient client = new DefaultHttpClient();
+	    DefaultHttpClient client = CustomerHttpClient.getHttpClient();
+	    try {
+	    	//client.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy);
+
+	    	//上边和下面代码取其一 或者都用?
+	        //HttpHost target = new HttpHost(mHost, 443, "https");
+	        //System.out.println("executing request to " + target + " via " + proxy);
+	        //HttpResponse rsp = client.execute(target, method);
+	    	setReq(method);
+	        HttpResponse rsp = client.execute(method);
+	        HttpEntity entity = rsp.getEntity();
+	        statusCode = rsp.getStatusLine().getStatusCode();
+	        //result = EntityUtils.toString(entity);
+	        result = processResponse(entity.getContent());
+	    } finally {
+	    	//client.getConnectionManager().shutdown();
+	    }
+		//===========================================================================
+		
+	    //client.getHostConfiguration().setHost(mHost, mPort, "https");
+		//method.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
 
 		// 设置请求body部分
-		setReq(method);
-
-		statusCode = client.executeMethod(method);
+//		setReq(method);
+//		statusCode = client.executeMethod(method);
+//	    result = processResponse(method.getResponseBodyAsStream());
+	    
 		//Log.d("result", statusCode + "");
+		
 		if (statusCode != HttpStatus.SC_OK) {
 			return null;
 		}
-
-		Object result = null;
-		result = processResponse(method.getResponseBodyAsStream());
 
 		return result;
 	}
@@ -144,17 +173,25 @@ public abstract class HttpReq extends AsyncTask<Void, Integer, Object> {
 	 * 
 	 * @return InputStream 发送图片后，网络返回的结果
 	 */
+//	private InputStream picMethod() {
+//		return null;
+//	}
+	
 	private InputStream picMethod() {
 		
-		HttpClient client = new HttpClient();
+		DefaultHttpClient client = new DefaultHttpClient();
 
 		InputStream result = null;
-		PostMethod method = new PostMethod(mUrl);
+		HttpPost method = new HttpPost(mUrl);
 		String strparams = mParam.toString();
 		try {
-			StringPart strPart = null;
-			FilePart picPart = null;
-			ArrayList<Part> partList = new ArrayList<Part>();
+			//StringEntity strEnt = null;
+			//FileEntity picEnt = null;
+			//ArrayList<AbstractHttpEntity> partList = new ArrayList<AbstractHttpEntity>();
+			MultipartEntity entity = new MultipartEntity();
+//			StringPart strPart = null;
+//			FilePart picPart = null;
+//			ArrayList<Part> partList = new ArrayList<Part>();
 			if (strparams != null && !strparams.equals("")) {
 				// 分割文本类型参数字符串
 				String[] params = strparams.split("&");
@@ -164,8 +201,9 @@ public abstract class HttpReq extends AsyncTask<Void, Integer, Object> {
 							String[] p = str.split("=");
 							// 获取参数值
 							String value = (p.length == 2 ? decode(p[1]) : "");
-							strPart = new StringPart(p[0], value, "utf-8");
-							partList.add(strPart);
+							//strPart = new StringPart(p[0], value, "utf-8");
+							//partList.add(strPart);
+							entity.addPart(p[0], new StringBody(value, Charset.forName("UTF-8")));
 						}
 					}
 				}
@@ -174,21 +212,31 @@ public abstract class HttpReq extends AsyncTask<Void, Integer, Object> {
 				for (int i = 0; i < pics.length; i++) {
 					pic[i] = (byte) pics[i];
 				}
-				picPart = new FilePart("pic", new ByteArrayPartSource(
-						"123456.jpg", pic), "image/jpeg", "utf-8");
-				partList.add(picPart);
+				//picPart = new FilePart("pic", new ByteArrayPartSource("123456.jpg", pic), "image/jpeg", "utf-8");
+				//partList.add(picPart);
+				ByteArrayBody picBody = new ByteArrayBody(pic, "image/jpeg", "123456.jpg");
+				entity.addPart("pic", picBody);
+				//entity.addPart("pic", new FileBody(new File("123456.jpg")));
+				//picEnt = new FileEntity("pic", new ByteArrayPartSource("123456.jpg", pic), "image/jpeg", "utf-8");
 
 			}
-			Part[] parts = new Part[partList.size()];
-			parts = partList.toArray(parts);
-			MultipartRequestEntity mrp = new MultipartRequestEntity(parts,
-					method.getParams());
-			method.setRequestEntity(mrp);
-			int statusCode = client.executeMethod(method);
+			//Part[] parts = new Part[partList.size()];
+			//parts = partList.toArray(parts);
+			//MultipartRequestEntity mrp = new MultipartRequestEntity(parts,method.getParams());
+			//method.setRequestEntity(mrp);
+			method.setEntity(entity);
+			HttpResponse httpResponse = client.execute(method);
+			int statusCode = httpResponse.getStatusLine().getStatusCode();
+			//String strResult = EntityUtils.toString(httpResponse.getEntity());
+			//result = new StringBufferInputStream(strResult);
+			
+			result = httpResponse.getEntity().getContent();
+			
+			//int statusCode = client.executeMethod(method);
 			if (statusCode != HttpStatus.SC_OK) {
 				return null;
 			}
-			result = method.getResponseBodyAsStream();
+			//result = method.getResponseBodyAsStream();
 
 		} catch (IOException e) {
 			// TODO: handle exception
@@ -239,15 +287,15 @@ public abstract class HttpReq extends AsyncTask<Void, Integer, Object> {
 	/**
 	 * 继承PostMethod类，重写返回RequestCharSet为UTF-8
 	 */
-	public static class UTF8PostMethod extends PostMethod {
-		public UTF8PostMethod(String url) {
+	public static class UTF8HttpPost extends HttpPost {
+		public UTF8HttpPost(String url) {
 			super(url);
 		}
 
-		@Override
-		public String getRequestCharSet() {
-			return "UTF-8";
-		}
+//		@Override
+//		public String getRequestCharSet() {
+//			return "UTF-8";
+//		}
 	}
 
 	/**
